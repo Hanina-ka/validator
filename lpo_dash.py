@@ -14,6 +14,17 @@ if uploaded_file:
     df = pd.read_excel(uploaded_file)
     df.columns = [str(c).strip() for c in df.columns]
 
+    # Attempt to convert every column to datetime
+    for col in df.columns:
+            try:
+                df[col] = pd.to_datetime(df[col], errors='coerce')  # convert, non-dates become NaT
+            except:
+                pass
+
+# Optional: format for display (still keeps underlying datetime for filtering)
+for col in df.select_dtypes(include='datetime64[ns]').columns:
+    df[col] = df[col].dt.strftime('%Y-%m-%d')
+
     st.subheader("Data Preview")
     st.dataframe(df.head(20))
 

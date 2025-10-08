@@ -15,13 +15,6 @@ if uploaded_file:
     df = pd.read_excel(uploaded_file)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # Attempt to convert any column that looks like a date to datetime
-    for col in df.columns:
-        try:
-            df[col] = pd.to_datetime(df[col], errors='coerce')  # non-dates become NaT
-        except:
-            pass
-
     st.subheader("Data Preview")
     st.dataframe(df.head(20))
 
@@ -93,12 +86,12 @@ if uploaded_file:
             st.error(f"Error applying numeric filter: {e}")
 
         # Apply date range filters
-        if lpo_range and "lpo_date" in filtered_df.columns:
+        if lpo_range:
             filtered_df = filtered_df[
                 (pd.to_datetime(filtered_df["lpo_date"]) >= pd.to_datetime(lpo_range[0])) &
                 (pd.to_datetime(filtered_df["lpo_date"]) <= pd.to_datetime(lpo_range[1]))
             ]
-        if grn_range and "grn_date" in filtered_df.columns:
+        if grn_range:
             filtered_df = filtered_df[
                 (pd.to_datetime(filtered_df["grn_date"]) >= pd.to_datetime(grn_range[0])) &
                 (pd.to_datetime(filtered_df["grn_date"]) <= pd.to_datetime(grn_range[1]))
@@ -138,11 +131,10 @@ if uploaded_file:
             csv = filtered_df.to_csv(index=False)
             st.download_button("Download Filtered Data as CSV", csv, "filtered_data.csv", "text/csv")
 
-            # ---------- Download Excel (proper date format, no ####) ----------
+            # ---------- Download Excel with proper date format ----------
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='yyyy-mm-dd', date_format='yyyy-mm-dd') as writer:
                 filtered_df.to_excel(writer, index=False, sheet_name='Filtered Data')
-                writer.save()
             st.download_button(
                 label="Download Filtered Data as Excel",
                 data=output.getvalue(),

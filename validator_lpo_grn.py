@@ -1,53 +1,69 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 
-st.title("📦 LPO vs GRN Validation Tool")
+st.set_page_config(page_title="Smart LPO-GRN Filter", layout="wide")
+st.title("🔍 Smart Filter Dashboard")
 
 # ---------- Upload Excel ----------
-uploaded_file = st.file_uploader("Upload your Excel file", type=["xlsx"])
+uploaded_file = st.file_uploader("Upload your Excel file", type=["xlsx", "xls", "csv"])
 
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
-
-    # ---------- Clean Columns ----------
-    df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
-
-    # ---------- Supplier Filter ----------
-    if "supplier" in df.columns:
-        suppliers = df["supplier"].dropna().unique()
-        selected_suppliers = st.multiselect(
-            "Select Supplier(s)", options=suppliers, default=list(suppliers)
-        )
-        df = df[df["supplier"].isin(selected_suppliers)]
-
-    # ---------- Convert to Dates ----------
-    df["lpo_date"] = pd.to_datetime(df["lpo_date"], errors="coerce")
-    df["grn_date"] = pd.to_datetime(df["grn_date"], errors="coerce")
-
-    # ---------- Validation Checks ----------
-    df["date_check"] = df.apply(
-        lambda x: "✅ OK" if x["grn_date"] > x["lpo_date"] else "❌ Invalid (Delivered before order)",
-        axis=1
-    )
-
-    df["qty_difference"] = df["received_qty"] - df["ordered_qty"]
-    df["qty_status"] = df.apply(
-        lambda x: "✅ Same"
-        if x["qty_difference"] == 0
-        else ("📈 More Received" if x["qty_difference"] > 0 else "📉 Less Received"),
-        axis=1
-    )
-
-    # ---------- Display Results ----------
-    st.subheader("📊 Validation Results")
-    st.dataframe(df[[
-        "supplier", "lpo_number", "lpo_date", "grn_number", "grn_date",
-        "ordered_qty", "received_qty", "date_check", "qty_status"
-    ]])
-
-    # ---------- Summary ----------
-    st.subheader("📋 Summary Insights")
-    st.write(f"✅ Correct delivery dates: {(df['date_check'] == '✅ OK').sum()}")
-    st.write(f"❌ Invalid date orders: {(df['date_check'] != '✅ OK').sum()}")
-    st.write(f"📈 Over-received items: {(df['qty_difference'] > 0).sum()}")
-    st.write(f"📉 Under-received items: {(df['qty_difference'] < 0).sum()}")
+    df.columns = [str(c).strip() for c in df.columns]
+    
+    st.subheader("Data Preview")
+    st.dataframe(df.head(20))
+    
+    # ---------- Detect categorical columns ----------
+    categorical_cols = [col for col in df.columns if df[col].nunique() < 20]
+    
+    st.subheader("Filter by Unique Values")
+    selected_values = {}
+    for col in categorical_cols:
+        options = ["All"] + sorted(df[col].dropna().unique())
+        selected_values[col] = st.selectbox(f"{col}:", options)
+    
+    # Apply categorical filters
+    filtered_df = df.copy()
+    for col, val in selected_values.items():
+        if val != "All":
+            filtered_df = filtered_df[filtered_df[col] == val]
+    
+    # ---------- Additional dynamic filter ----------
+    st.subheader("Additional Condition Filter")
+    col1 = st.selectbox("Select Column", df.columns)
+    operator = st.selectbox("Select Operator", [">", "<", "==", ">=", "<=", "!="])
+    compare_type = st.radio("Compare With", ["Value", "Another Column"])
+    
+    value_input = None
+    col2 = None
+    if compare_type == "Value":
+        value_input = st.text_input("Enter Value")
+    else:
+        col2 = st.selectbox("Select Column to Compare", df.columns)
+    
+    # Apply condition filter
+    if st.button("Apply Filters"):
+        temp_df = filtered_df.copy()
+        try:
+            if compare_type == "Value" and value_input:
+                try:
+                    val = float(value_input)
+                    temp_df = temp_df[temp_df[col1].astype(float).eval(f"{operator}{val}")]
+                except:
+                    temp_df = temp_df[temp_df[col1].astype(str).eval(f"{operator}'{value_input}'")]
+            elif compare_type == "Another Column" and col2:
+                temp_df = temp_df[temp_df[col1].eval(f"{operator} {col2}")]
+            
+            if temp_df.empty:
+                st.warning("⚠️ No rows matched your filter.")
+            else:
+                st.dataframe(temp_df)
+                st.success(f"✅ {len(temp_df)} rows matched your criteria.")
+                
+                # Download filtered results
+                csv = temp_df.to_csv(index=False)
+                st.download_button("Download Filtered Data as CSV", csv, "filtered_data.csv", "text/csv")
+        except Exception as e:
+            st.error(f"Error: {e}")

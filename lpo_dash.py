@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import operator as op
+import io
 
 st.set_page_config(page_title="Enhanced LPO-GRN Dashboard", layout="wide")
 st.title("📊 Enhanced LPO-GRN Dashboard")
@@ -13,6 +14,13 @@ uploaded_file = st.file_uploader("Upload your Excel file", type=["xlsx", "xls", 
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
     df.columns = [str(c).strip() for c in df.columns]
+
+    # Attempt to convert any column that looks like a date to datetime
+    for col in df.columns:
+        try:
+            df[col] = pd.to_datetime(df[col], errors='coerce')  # non-dates become NaT
+        except:
+            pass
 
     st.subheader("Data Preview")
     st.dataframe(df.head(20))
@@ -85,12 +93,12 @@ if uploaded_file:
             st.error(f"Error applying numeric filter: {e}")
 
         # Apply date range filters
-        if lpo_range:
+        if lpo_range and "lpo_date" in filtered_df.columns:
             filtered_df = filtered_df[
                 (pd.to_datetime(filtered_df["lpo_date"]) >= pd.to_datetime(lpo_range[0])) &
                 (pd.to_datetime(filtered_df["lpo_date"]) <= pd.to_datetime(lpo_range[1]))
             ]
-        if grn_range:
+        if grn_range and "grn_date" in filtered_df.columns:
             filtered_df = filtered_df[
                 (pd.to_datetime(filtered_df["grn_date"]) >= pd.to_datetime(grn_range[0])) &
                 (pd.to_datetime(filtered_df["grn_date"]) <= pd.to_datetime(grn_range[1]))
@@ -126,6 +134,18 @@ if uploaded_file:
                 fig = px.histogram(filtered_df, x=num_col, nbins=20, title=f"{num_col} Distribution")
                 st.plotly_chart(fig, use_container_width=True)
 
-            # Download
+            # ---------- Download CSV ----------
             csv = filtered_df.to_csv(index=False)
             st.download_button("Download Filtered Data as CSV", csv, "filtered_data.csv", "text/csv")
+
+            # ---------- Download Excel (proper date format, no ####) ----------
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='yyyy-mm-dd', date_format='yyyy-mm-dd') as writer:
+                filtered_df.to_excel(writer, index=False, sheet_name='Filtered Data')
+                writer.save()
+            st.download_button(
+                label="Download Filtered Data as Excel",
+                data=output.getvalue(),
+                file_name="filtered_data.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )

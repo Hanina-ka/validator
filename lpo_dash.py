@@ -13,11 +13,11 @@ uploaded_file = st.file_uploader("Upload your Excel file", type=["xlsx", "xls", 
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
     df.columns = [str(c).strip() for c in df.columns]
-    
+
     # Convert date-like columns
     for col in df.columns:
         try:
-            df[col] = pd.to_datetime(df[col], errors='coerce')
+            df[col] = pd.to_datetime(df[col], errors='coerce')  # convert, non-dates become NaT
         except:
             pass
 
@@ -32,9 +32,9 @@ if uploaded_file:
 
     # Categorical Filters
     selected_values = {}
-    for i, col in enumerate(categorical_cols):
+    for col in categorical_cols:
         options = ["All"] + sorted(df[col].dropna().unique())
-        selected_values[col] = st.sidebar.selectbox(f"{col}:", options, key=f"cat_{i}_{col}")
+        selected_values[col] = st.sidebar.selectbox(f"{col}:", options, key=f"{col}_key")
 
     # Numeric / Date Filter
     st.sidebar.subheader("Additional Condition Filters")
@@ -49,12 +49,19 @@ if uploaded_file:
         col2 = st.sidebar.selectbox("Select Column to Compare", df.columns, key="col2")
 
     # Date range filters
-    date_cols = [c for c in ["lpo_date", "grn_date"] if c in df.columns]
-    date_ranges = {}
-    for i, col in enumerate(date_cols):
-        min_date = df[col].min().date()
-        max_date = df[col].max().date()
-        date_ranges[col] = st.sidebar.date_input(f"{col} Date Range", [min_date, max_date], key=f"range_{i}_{col}")
+    if "lpo_date" in df.columns:
+        lpo_min = pd.to_datetime(df["lpo_date"].min())
+        lpo_max = pd.to_datetime(df["lpo_date"].max())
+        lpo_range = st.sidebar.date_input("LPO Date Range", [lpo_min, lpo_max], key="lpo_range")
+    else:
+        lpo_range = None
+
+    if "grn_date" in df.columns:
+        grn_min = pd.to_datetime(df["grn_date"].min())
+        grn_max = pd.to_datetime(df["grn_date"].max())
+        grn_range = st.sidebar.date_input("GRN Date Range", [grn_min, grn_max], key="grn_range")
+    else:
+        grn_range = None
 
     # ---------- Button to apply filters ----------
     if st.sidebar.button("Enter / Apply Filters"):
@@ -73,19 +80,28 @@ if uploaded_file:
             if compare_type == "Value" and value_input:
                 try:
                     val = float(value_input)
-                    filtered_df = filtered_df[ops[operator_str](filtered_df[num_col].astype(float), val)]
+                    mask = ops[operator_str](filtered_df[num_col].astype(float), val)
+                    filtered_df = filtered_df[mask]
                 except:
-                    filtered_df = filtered_df[ops[operator_str](filtered_df[num_col].astype(str), str(value_input))]
+                    mask = ops[operator_str](filtered_df[num_col].astype(str), str(value_input))
+                    filtered_df = filtered_df[mask]
             elif compare_type == "Another Column" and col2:
-                filtered_df = filtered_df[ops[operator_str](filtered_df[num_col], filtered_df[col2])]
+                mask = ops[operator_str](filtered_df[num_col], filtered_df[col2])
+                filtered_df = filtered_df[mask]
         except Exception as e:
             st.error(f"Error applying numeric filter: {e}")
 
         # Apply date range filters
-        for col, date_range in date_ranges.items():
-            start_date = pd.to_datetime(date_range[0])
-            end_date = pd.to_datetime(date_range[1])
-            filtered_df = filtered_df[(filtered_df[col] >= start_date) & (filtered_df[col] <= end_date)]
+        if lpo_range:
+            filtered_df = filtered_df[
+                (pd.to_datetime(filtered_df["lpo_date"]) >= pd.to_datetime(lpo_range[0])) &
+                (pd.to_datetime(filtered_df["lpo_date"]) <= pd.to_datetime(lpo_range[1]))
+            ]
+        if grn_range:
+            filtered_df = filtered_df[
+                (pd.to_datetime(filtered_df["grn_date"]) >= pd.to_datetime(grn_range[0])) &
+                (pd.to_datetime(filtered_df["grn_date"]) <= pd.to_datetime(grn_range[1]))
+            ]
 
         # ---------- Display Results ----------
         if filtered_df.empty:
@@ -118,6 +134,6 @@ if uploaded_file:
                 fig = px.histogram(filtered_df, x=num_col, nbins=20, title=f"{num_col} Distribution")
                 st.plotly_chart(fig, use_container_width=True)
 
-            # Download filtered data
+            # Download
             csv = filtered_df.to_csv(index=False)
             st.download_button("Download Filtered Data as CSV", csv, "filtered_data.csv", "text/csv")

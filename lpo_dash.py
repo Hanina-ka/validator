@@ -14,12 +14,14 @@ if uploaded_file:
     df = pd.read_excel(uploaded_file)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # Attempt to convert every column to datetime
+    # Convert all columns that can be parsed as dates
     for col in df.columns:
-            try:
-                df[col] = pd.to_datetime(df[col], errors='coerce')  # convert, non-dates become NaT
-            except:
-                pass
+        df[col] = pd.to_datetime(df[col], errors='coerce')  # non-dates become NaT
+    
+    # Optional: format for display (still keeps underlying datetime for filtering)
+    for col in df.select_dtypes(include='datetime64[ns]').columns:
+        df[col] = df[col].dt.strftime('%Y-%m-%d')
+
 
 # Optional: format for display (still keeps underlying datetime for filtering)
 for col in df.select_dtypes(include='datetime64[ns]').columns:
@@ -36,9 +38,10 @@ for col in df.select_dtypes(include='datetime64[ns]').columns:
 
     # Categorical Filters
     selected_values = {}
-    for col in categorical_cols:
+    for i, col in enumerate(categorical_cols):
         options = ["All"] + sorted(df[col].dropna().unique())
-        selected_values[col] = st.sidebar.selectbox(f"{col}:", options, key=f"{col}_key")
+        safe_key = f"cat_{i}_{col}"  # unique key
+        selected_values[col] = st.sidebar
 
     # Numeric / Date Filter
     st.sidebar.subheader("Additional Condition Filters")

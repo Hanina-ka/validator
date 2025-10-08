@@ -104,28 +104,9 @@ if uploaded_file:
             st.subheader("Filtered Data")
             st.dataframe(filtered_df.head(50))
 
-            # Dashboard KPIs
-            col_a, col_b, col_c, col_d = st.columns(4)
-            col_a.metric("Total Orders", len(filtered_df))
-            if "lpo_date" in filtered_df.columns and "grn_date" in filtered_df.columns:
-                valid_dates = (filtered_df["grn_date"] >= filtered_df["lpo_date"]).sum()
-                col_b.metric("Valid Deliveries", valid_dates)
-            if "ordered_qty" in filtered_df.columns and "received_qty" in filtered_df.columns:
-                over_received = (filtered_df["received_qty"] > filtered_df["ordered_qty"]).sum()
-                under_received = (filtered_df["received_qty"] < filtered_df["ordered_qty"]).sum()
-                col_c.metric("Over Received", over_received)
-                col_d.metric("Under Received", under_received)
 
-            # Charts
-            for cat_col in categorical_cols:
-                fig = px.bar(filtered_df[cat_col].value_counts().reset_index(),
-                             x='index', y=cat_col, title=f"Distribution of {cat_col}")
-                st.plotly_chart(fig, use_container_width=True)
 
-            numeric_cols = filtered_df.select_dtypes(include=np.number).columns
-            for num_col in numeric_cols:
-                fig = px.histogram(filtered_df, x=num_col, nbins=20, title=f"{num_col} Distribution")
-                st.plotly_chart(fig, use_container_width=True)
+
 
             # ---------- Download CSV ----------
             csv = filtered_df.to_csv(index=False)

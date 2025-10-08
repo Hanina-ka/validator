@@ -88,4 +88,60 @@ if uploaded_file:
             (pd.to_datetime(filtered_df["grn_date"]) <= pd.to_datetime(grn_range[1]))
         ]
 
-    if filter
+    if filtered_df.empty:
+        st.warning("⚠️ No rows matched your filters.")
+    else:
+        # ---------- Color-coded table ----------
+        def color_row(row):
+            color = []
+            for col in filtered_df.columns:
+                if col.lower() in ["grn_date", "lpo_date"]:
+                    if "grn_date" in filtered_df.columns and "lpo_date" in filtered_df.columns:
+                        if row["grn_date"] < row["lpo_date"]:
+                            color.append("background-color: #ff9999")  # red
+                        else:
+                            color.append("")
+                    else:
+                        color.append("")
+                elif col.lower() in ["ordered_qty", "received_qty"]:
+                    if row["received_qty"] > row["ordered_qty"]:
+                        color.append("background-color: #99ff99")  # green
+                    elif row["received_qty"] < row["ordered_qty"]:
+                        color.append("background-color: #ffcc99")  # orange
+                    else:
+                        color.append("")
+                else:
+                    color.append("")
+            return color
+
+        st.subheader("Filtered Data (Color-coded)")
+        st.dataframe(filtered_df.style.apply(color_row, axis=1))
+
+        # ---------- Dashboard / KPIs ----------
+        st.subheader("📈 Dashboard Insights")
+        col_a, col_b, col_c, col_d = st.columns(4)
+        col_a.metric("Total Orders", len(filtered_df))
+        if "lpo_date" in filtered_df.columns and "grn_date" in filtered_df.columns:
+            valid_dates = (filtered_df["grn_date"] >= filtered_df["lpo_date"]).sum()
+            col_b.metric("Valid Deliveries", valid_dates)
+        if "ordered_qty" in filtered_df.columns and "received_qty" in filtered_df.columns:
+            over_received = (filtered_df["received_qty"] > filtered_df["ordered_qty"]).sum()
+            under_received = (filtered_df["received_qty"] < filtered_df["ordered_qty"]).sum()
+            col_c.metric("Over Received", over_received)
+            col_d.metric("Under Received", under_received)
+
+        # ---------- Bar charts for categorical columns ----------
+        for cat_col in categorical_cols:
+            fig = px.bar(filtered_df[cat_col].value_counts().reset_index(),
+                         x='index', y=cat_col, title=f"Distribution of {cat_col}")
+            st.plotly_chart(fig, use_container_width=True)
+
+        # ---------- Histograms for numeric columns ----------
+        numeric_cols = filtered_df.select_dtypes(include=np.number).columns
+        for num_col in numeric_cols:
+            fig = px.histogram(filtered_df, x=num_col, nbins=20, title=f"{num_col} Distribution")
+            st.plotly_chart(fig, use_container_width=True)
+
+        # ---------- Download Filtered Results ----------
+        csv = filtered_df.to_csv(index=False)
+        st.download_button("Download Filtered Data as CSV", csv, "filtered_data.csv", "text/csv")

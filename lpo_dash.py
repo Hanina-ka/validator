@@ -14,17 +14,8 @@ if uploaded_file:
     df = pd.read_excel(uploaded_file)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # ---------- Auto-convert date-like columns ----------
-    for col in df.columns:
-        df[col] = pd.to_datetime(df[col], errors='coerce')  # non-dates become NaT
-
-    # Create display version for Streamlit (formatted as YYYY-MM-DD)
-    df_display = df.copy()
-    for col in df_display.select_dtypes(include='datetime64[ns]').columns:
-        df_display[col] = df_display[col].dt.strftime('%Y-%m-%d')
-
     st.subheader("Data Preview")
-    st.dataframe(df_display.head(20))
+    st.dataframe(df.head(20))
 
     # ---------- Detect categorical columns ----------
     categorical_cols = [col for col in df.columns if df[col].nunique() < 20]
@@ -34,12 +25,11 @@ if uploaded_file:
 
     # Categorical Filters
     selected_values = {}
-    for i, col in enumerate(categorical_cols):
+    for col in categorical_cols:
         options = ["All"] + sorted(df[col].dropna().unique())
-        safe_key = f"cat_{i}_{col}"  # unique key
-        selected_values[col] = st.sidebar.selectbox(f"{col}:", options, key=safe_key)
+        selected_values[col] = st.sidebar.selectbox(f"{col}:", options, key=f"{col}_key")
 
-    # Numeric / Column Comparison Filter
+    # Numeric / Date Filter
     st.sidebar.subheader("Additional Condition Filters")
     num_col = st.sidebar.selectbox("Select Column", df.columns, key="num_col")
     operator_str = st.sidebar.selectbox("Select Operator", [">", "<", "==", ">=", "<=", "!="], key="op")
@@ -52,14 +42,21 @@ if uploaded_file:
         col2 = st.sidebar.selectbox("Select Column to Compare", df.columns, key="col2")
 
     # Date range filters
-    date_cols = [c for c in df.select_dtypes(include='datetime64[ns]').columns]
-    date_ranges = {}
-    for col in date_cols:
-        min_date = df[col].min()
-        max_date = df[col].max()
-        date_ranges[col] = st.sidebar.date_input(f"{col} Date Range", [min_date, max_date], key=f"range_{col}")
+    if "lpo_date" in df.columns:
+        lpo_min = pd.to_datetime(df["lpo_date"].min())
+        lpo_max = pd.to_datetime(df["lpo_date"].max())
+        lpo_range = st.sidebar.date_input("LPO Date Range", [lpo_min, lpo_max], key="lpo_range")
+    else:
+        lpo_range = None
 
-    # ---------- Apply Filters ----------
+    if "grn_date" in df.columns:
+        grn_min = pd.to_datetime(df["grn_date"].min())
+        grn_max = pd.to_datetime(df["grn_date"].max())
+        grn_range = st.sidebar.date_input("GRN Date Range", [grn_min, grn_max], key="grn_range")
+    else:
+        grn_range = None
+
+    # ---------- Button to apply filters ----------
     if st.sidebar.button("Enter / Apply Filters"):
         filtered_df = df.copy()
 
@@ -71,7 +68,7 @@ if uploaded_file:
         # Operator mapping
         ops = {">": op.gt, "<": op.lt, "==": op.eq, ">=": op.ge, "<=": op.le, "!=": op.ne}
 
-        # Apply numeric / column filter
+        # Apply numeric/date filter
         try:
             if compare_type == "Value" and value_input:
                 try:
@@ -88,52 +85,47 @@ if uploaded_file:
             st.error(f"Error applying numeric filter: {e}")
 
         # Apply date range filters
-        for col, drange in date_ranges.items():
+        if lpo_range:
             filtered_df = filtered_df[
-                (filtered_df[col] >= pd.to_datetime(drange[0])) &
-                (filtered_df[col] <= pd.to_datetime(drange[1]))
+                (pd.to_datetime(filtered_df["lpo_date"]) >= pd.to_datetime(lpo_range[0])) &
+                (pd.to_datetime(filtered_df["lpo_date"]) <= pd.to_datetime(lpo_range[1]))
+            ]
+        if grn_range:
+            filtered_df = filtered_df[
+                (pd.to_datetime(filtered_df["grn_date"]) >= pd.to_datetime(grn_range[0])) &
+                (pd.to_datetime(filtered_df["grn_date"]) <= pd.to_datetime(grn_range[1]))
             ]
 
-        # ---------- Display Filtered Results ----------
+        # ---------- Display Results ----------
         if filtered_df.empty:
             st.warning("⚠️ No rows matched your filters.")
         else:
-            # Display table
-            df_display_filtered = filtered_df.copy()
-            for col in df_display_filtered.select_dtypes(include='datetime64[ns]').columns:
-                df_display_filtered[col] = df_display_filtered[col].dt.strftime('%Y-%m-%d')
-
             st.subheader("Filtered Data")
-            st.dataframe(df_display_filtered.head(50))
+            st.dataframe(filtered_df.head(50))
 
-            # ---------- Dashboard KPIs ----------
+            # Dashboard KPIs
             col_a, col_b, col_c, col_d = st.columns(4)
             col_a.metric("Total Orders", len(filtered_df))
-
             if "lpo_date" in filtered_df.columns and "grn_date" in filtered_df.columns:
-                valid_deliveries = (filtered_df["grn_date"] >= filtered_df["lpo_date"]).sum()
-                col_b.metric("Valid Deliveries", valid_deliveries)
-
+                valid_dates = (filtered_df["grn_date"] >= filtered_df["lpo_date"]).sum()
+                col_b.metric("Valid Deliveries", valid_dates)
             if "ordered_qty" in filtered_df.columns and "received_qty" in filtered_df.columns:
                 over_received = (filtered_df["received_qty"] > filtered_df["ordered_qty"]).sum()
                 under_received = (filtered_df["received_qty"] < filtered_df["ordered_qty"]).sum()
                 col_c.metric("Over Received", over_received)
                 col_d.metric("Under Received", under_received)
 
-            # ---------- Charts ----------
-            # Categorical columns
+            # Charts
             for cat_col in categorical_cols:
-                counts_df = filtered_df[cat_col].value_counts().reset_index()
-                counts_df.columns = [cat_col, "count"]
-                fig = px.bar(counts_df, x=cat_col, y="count", title=f"Distribution of {cat_col}")
+                fig = px.bar(filtered_df[cat_col].value_counts().reset_index(),
+                             x='index', y=cat_col, title=f"Distribution of {cat_col}")
                 st.plotly_chart(fig, use_container_width=True)
 
-            # Numeric columns
             numeric_cols = filtered_df.select_dtypes(include=np.number).columns
             for num_col in numeric_cols:
                 fig = px.histogram(filtered_df, x=num_col, nbins=20, title=f"{num_col} Distribution")
                 st.plotly_chart(fig, use_container_width=True)
 
-            # ---------- Download Filtered Data ----------
+            # Download
             csv = filtered_df.to_csv(index=False)
             st.download_button("Download Filtered Data as CSV", csv, "filtered_data.csv", "text/csv")

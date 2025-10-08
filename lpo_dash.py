@@ -14,13 +14,6 @@ if uploaded_file:
     df = pd.read_excel(uploaded_file)
     df.columns = [str(c).strip() for c in df.columns]
 
-    # Convert date-like columns
-    for col in df.columns:
-        try:
-            df[col] = pd.to_datetime(df[col], errors='coerce')  # convert, non-dates become NaT
-        except:
-            pass
-
     st.subheader("Data Preview")
     st.dataframe(df.head(20))
 
@@ -124,9 +117,8 @@ if uploaded_file:
 
             # Charts
             for cat_col in categorical_cols:
-                counts_df = filtered_df[cat_col].value_counts().reset_index()
-                counts_df.columns = [cat_col, "count"]
-                fig = px.bar(counts_df, x=cat_col, y="count", title=f"Distribution of {cat_col}")
+                fig = px.bar(filtered_df[cat_col].value_counts().reset_index(),
+                             x='index', y=cat_col, title=f"Distribution of {cat_col}")
                 st.plotly_chart(fig, use_container_width=True)
 
             numeric_cols = filtered_df.select_dtypes(include=np.number).columns

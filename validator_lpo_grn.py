@@ -9,7 +9,7 @@ st.set_page_config(page_title="LPO-GRN Auto Check", layout="wide")
 st.title("📊 LPO-GRN Date Check Dashboard")
 
 # ---------- Auto-load Excel from repo ----------
-DATA_FILE = "mrq status 1.xlsx"  # Make sure this file exists in your repo
+DATA_FILE = "data.xlsx"  # Make sure this file exists in your repo
 
 @st.cache_data
 def load_data(file_path=DATA_FILE):

@@ -94,6 +94,29 @@ if uploaded_file:
             st.subheader("Filtered Data")
             st.dataframe(filtered_df.head(50))
 
+            # ---------- Filter Summary Pie Chart ----------
+            total_records = len(df)
+            filtered_records = len(filtered_df)
+            remaining_records = total_records - filtered_records
+            
+            summary_data = pd.DataFrame({
+                "Category": ["Filtered Data", "Remaining Data"],
+                "Count": [filtered_records, remaining_records]
+            })
+            
+            fig_summary = px.pie(
+                summary_data,
+                values="Count",
+                names="Category",
+                title=f"📊 Filtered vs Total Records (Total: {total_records})",
+                color_discrete_sequence=px.colors.sequential.RdBu,
+                hole=0.3
+            )
+            fig_summary.update_traces(textinfo='percent+label')
+            
+            st.plotly_chart(fig_summary, use_container_width=True)
+
+
             # ---------- Convert date columns before saving ----------
             for col in filtered_df.columns:
                 if "date" in col.lower():

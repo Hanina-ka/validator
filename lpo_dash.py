@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import operator as op
-import io
+from io import BytesIO
 
 st.set_page_config(page_title="Enhanced LPO-GRN Dashboard", layout="wide")
 st.title("📊 Enhanced LPO-GRN Dashboard")
@@ -24,36 +24,30 @@ if uploaded_file:
     # ---------- Sidebar Filters ----------
     st.sidebar.header("Filter Options")
 
-    # Categorical Filters
     selected_values = {}
     for col in categorical_cols:
         options = ["All"] + sorted(df[col].dropna().unique())
         selected_values[col] = st.sidebar.selectbox(f"{col}:", options, key=f"{col}_key")
 
-    # Numeric / Date Filter
     st.sidebar.subheader("Additional Condition Filters")
-    num_col = st.sidebar.selectbox("Select Column", df.columns, key="num_col")
-    operator_str = st.sidebar.selectbox("Select Operator", [">", "<", "==", ">=", "<=", "!="], key="op")
-    compare_type = st.sidebar.radio("Compare With", ["Value", "Another Column"], key="compare_type")
-    value_input = None
-    col2 = None
+    num_col = st.sidebar.selectbox("Select Column", df.columns)
+    operator_str = st.sidebar.selectbox("Select Operator", [">", "<", "==", ">=", "<=", "!="])
+    compare_type = st.sidebar.radio("Compare With", ["Value", "Another Column"])
+    value_input, col2 = None, None
     if compare_type == "Value":
-        value_input = st.sidebar.text_input("Enter Value", key="val_input")
+        value_input = st.sidebar.text_input("Enter Value")
     else:
-        col2 = st.sidebar.selectbox("Select Column to Compare", df.columns, key="col2")
+        col2 = st.sidebar.selectbox("Select Column to Compare", df.columns)
 
-    # Date range filters
     if "lpo_date" in df.columns:
-        lpo_min = pd.to_datetime(df["lpo_date"].min())
-        lpo_max = pd.to_datetime(df["lpo_date"].max())
-        lpo_range = st.sidebar.date_input("LPO Date Range", [lpo_min, lpo_max], key="lpo_range")
+        lpo_min, lpo_max = pd.to_datetime(df["lpo_date"].min()), pd.to_datetime(df["lpo_date"].max())
+        lpo_range = st.sidebar.date_input("LPO Date Range", [lpo_min, lpo_max])
     else:
         lpo_range = None
 
     if "grn_date" in df.columns:
-        grn_min = pd.to_datetime(df["grn_date"].min())
-        grn_max = pd.to_datetime(df["grn_date"].max())
-        grn_range = st.sidebar.date_input("GRN Date Range", [grn_min, grn_max], key="grn_range")
+        grn_min, grn_max = pd.to_datetime(df["grn_date"].min()), pd.to_datetime(df["grn_date"].max())
+        grn_range = st.sidebar.date_input("GRN Date Range", [grn_min, grn_max])
     else:
         grn_range = None
 
@@ -61,15 +55,12 @@ if uploaded_file:
     if st.sidebar.button("Enter / Apply Filters"):
         filtered_df = df.copy()
 
-        # Apply categorical filters
         for col, val in selected_values.items():
             if val != "All":
                 filtered_df = filtered_df[filtered_df[col] == val]
 
-        # Operator mapping
         ops = {">": op.gt, "<": op.lt, "==": op.eq, ">=": op.ge, "<=": op.le, "!=": op.ne}
 
-        # Apply numeric/date filter
         try:
             if compare_type == "Value" and value_input:
                 try:
@@ -85,7 +76,6 @@ if uploaded_file:
         except Exception as e:
             st.error(f"Error applying numeric filter: {e}")
 
-        # Apply date range filters
         if lpo_range:
             filtered_df = filtered_df[
                 (pd.to_datetime(filtered_df["lpo_date"]) >= pd.to_datetime(lpo_range[0])) &
@@ -104,20 +94,24 @@ if uploaded_file:
             st.subheader("Filtered Data")
             st.dataframe(filtered_df.head(50))
 
+            # ---------- Convert date columns before saving ----------
+            for col in filtered_df.columns:
+                if "date" in col.lower():
+                    filtered_df[col] = pd.to_datetime(filtered_df[col], errors='coerce').dt.strftime("%Y-%m-%d")
 
+            # ---------- Save properly formatted Excel ----------
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                filtered_df.to_excel(writer, index=False, sheet_name="Filtered Data")
+                worksheet = writer.sheets["Filtered Data"]
 
+                # Auto-adjust column width
+                for i, col in enumerate(filtered_df.columns):
+                    max_len = max(filtered_df[col].astype(str).map(len).max(), len(col)) + 2
+                    worksheet.set_column(i, i, max_len)
 
-
-            # ---------- Download CSV ----------
-            csv = filtered_df.to_csv(index=False)
-            st.download_button("Download Filtered Data as CSV", csv, "filtered_data.csv", "text/csv")
-
-            # ---------- Download Excel with proper date format ----------
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter', datetime_format='yyyy-mm-dd', date_format='yyyy-mm-dd') as writer:
-                filtered_df.to_excel(writer, index=False, sheet_name='Filtered Data')
             st.download_button(
-                label="Download Filtered Data as Excel",
+                label="📥 Download Filtered Data as Excel",
                 data=output.getvalue(),
                 file_name="filtered_data.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

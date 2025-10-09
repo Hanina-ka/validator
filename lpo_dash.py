@@ -6,7 +6,7 @@ import operator as op
 from io import BytesIO
 
 st.set_page_config(page_title="Enhanced LPO-GRN Dashboard", layout="wide")
-st.title("📊 Enhanced LPO-GRN Dashboard")
+st.title("📊 Enhanced LPO-GRN d")
 
 # ---------- Upload Excel ----------
 uploaded_file = st.file_uploader("Upload your Excel file", type=["xlsx", "xls", "csv"])
